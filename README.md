@@ -20,6 +20,8 @@ reference-files       Original Excel/CSV ground truth — do not deploy
 docs/DECISIONS.md     Decision points, schema deviations, field-gap analysis
 ```
 
+**Full step-by-step run & deploy guide: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).**
+
 ## Run locally
 
 ```bash

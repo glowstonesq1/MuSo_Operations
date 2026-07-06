@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    env:
+      # anon key is a public client key; safe in CI. Never put service_role here.
+      NEXT_PUBLIC_SUPABASE_URL: https://bxbasutnjncwvevyeipn.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: sb_publishable_bN-3OCS58jafCo_cmFRxyw_HauDKSwU
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
