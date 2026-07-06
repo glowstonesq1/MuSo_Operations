@@ -30,6 +30,16 @@ const F = {
   textarea: (props: any) => <textarea className="input" rows={2} {...props} />,
 };
 
+// Must live at module scope: defining this inside BookingForm gave it a new
+// component identity on every keystroke, so React remounted the subtree and
+// each input lost focus after a single character.
+const Row = ({ label, children }: { label: string; children: React.ReactNode }) => (
+  <div>
+    <label className="label">{label}</label>
+    {children}
+  </div>
+);
+
 export function BookingForm({ staff, resources, vendors, fieldDefs, initial, defaultDate }: BookingFormProps) {
   const router = useRouter();
   const [form, setForm] = useState<any>(
@@ -126,13 +136,6 @@ export function BookingForm({ staff, resources, vendors, fieldDefs, initial, def
     }));
     setAiNote(`AI suggestions applied to empty fields${data.cached ? " (cached)" : ""}. Review before saving — nothing is saved automatically.`);
   }
-
-  const Row = ({ label, children }: any) => (
-    <div>
-      <label className="label">{label}</label>
-      {children}
-    </div>
-  );
 
   return (
     <div className="space-y-4">
