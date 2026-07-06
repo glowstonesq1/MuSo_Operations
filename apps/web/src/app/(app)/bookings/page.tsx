@@ -37,38 +37,38 @@ export default async function BookingsPage({ searchParams }: { searchParams: { q
         <button className="btn-outline">Filter</button>
       </form>
       <div className="card overflow-x-auto p-0">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
+        <table className="table-modern">
+          <thead>
             <tr>
               {["Date", "Type", "Name", "Slot", "Headcount", "Ops POC", "Status"].map((h) => (
-                <th key={h} className="px-3 py-2">{h}</th>
+                <th key={h}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {(bookings ?? []).map((b: any) => (
-              <tr key={b.id} className="border-t border-slate-100 hover:bg-slate-50">
-                <td className="px-3 py-2 whitespace-nowrap">{b.visit_date}</td>
-                <td className="px-3 py-2">
+              <tr key={b.id}>
+                <td className="whitespace-nowrap tabular-nums">{b.visit_date}</td>
+                <td>
                   <span className="badge" style={{ backgroundColor: TYPE_COLORS[b.booking_type] }}>
                     {TYPE_LABELS[b.booking_type]}
                   </span>
                 </td>
-                <td className="px-3 py-2 font-medium">
+                <td className="font-semibold">
                   <Link className="hover:underline" href={`/bookings/${b.id}`}>{b.name}</Link>
                 </td>
-                <td className="px-3 py-2 whitespace-nowrap">{fmt12h(b.slot_start)}–{fmt12h(b.slot_end)}</td>
-                <td className="px-3 py-2">
+                <td className="whitespace-nowrap">{fmt12h(b.slot_start)}–{fmt12h(b.slot_end)}</td>
+                <td className="tabular-nums">
                   {(b.children_planned ?? 0) + (b.adults_planned ?? 0) + (b.teachers_planned ?? 0)}
-                  {b.children_actual != null && <span className="text-pink-600"> (act {b.children_actual})</span>}
+                  {b.children_actual != null && <span className="font-semibold text-pink-600"> (act {b.children_actual})</span>}
                 </td>
-                <td className="px-3 py-2">{b.ops_poc?.name ?? "NA"}</td>
-                <td className="px-3 py-2 text-xs uppercase text-slate-500">{b.status}</td>
+                <td>{b.ops_poc?.name ?? "NA"}</td>
+                <td><span className="pill bg-slate-100 uppercase tracking-wider text-slate-500">{b.status}</span></td>
               </tr>
             ))}
           </tbody>
         </table>
-        {(bookings ?? []).length === 0 && <p className="p-4 text-sm text-slate-400">No bookings found.</p>}
+        {(bookings ?? []).length === 0 && <p className="p-6 text-center text-sm text-slate-400">No bookings found.</p>}
       </div>
     </div>
   );

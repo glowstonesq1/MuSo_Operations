@@ -23,27 +23,27 @@ export default async function StaffPage() {
         </p>
       )}
       <div className="card overflow-x-auto p-0">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
+        <table className="table-modern">
+          <thead>
             <tr>
-              <th className="px-3 py-2">Name</th>
-              <th className="px-3 py-2">Role</th>
-              <th className="px-3 py-2">Department</th>
-              <th className="px-3 py-2">Extension</th>
-              <th className="px-3 py-2">Login linked</th>
-              {me?.role === "admin" && <th className="px-3 py-2">Manage</th>}
+              <th>Name</th>
+              <th>Role</th>
+              <th>Department</th>
+              <th>Extension</th>
+              <th>Login linked</th>
+              {me?.role === "admin" && <th>Manage (name · role · dept · ext · active)</th>}
             </tr>
           </thead>
           <tbody>
             {(staff ?? []).map((s: any) => (
-              <tr key={s.id} className="border-t border-slate-100">
-                <td className="px-3 py-2 font-medium">{s.name}</td>
-                <td className="px-3 py-2">{s.role}</td>
-                <td className="px-3 py-2">{s.department?.replace(/_/g, " ") ?? "—"}</td>
-                <td className="px-3 py-2">{s.extension ?? "—"}</td>
-                <td className="px-3 py-2">{s.auth_user_id ? "yes" : "no"}</td>
+              <tr key={s.id} className={s.is_active === false ? "opacity-50" : ""}>
+                <td className="font-semibold">{s.name}</td>
+                <td><span className="pill bg-slate-100 text-slate-600">{s.role}</span></td>
+                <td>{s.department?.replace(/_/g, " ") ?? "—"}</td>
+                <td className="tabular-nums">{s.extension ?? "—"}</td>
+                <td>{s.auth_user_id ? "✓" : "—"}</td>
                 {me?.role === "admin" && (
-                  <td className="px-3 py-2"><StaffRoleEditor member={s} /></td>
+                  <td><StaffRoleEditor member={s} /></td>
                 )}
               </tr>
             ))}

@@ -60,11 +60,26 @@ export default async function DailyMemoPage({ searchParams }: { searchParams: { 
     contacts: (contacts ?? []).map((c: any) => ({ name: c.name, extension: c.extension })),
   });
 
+  const expectedVisitors = rows.reduce(
+    (sum: number, b: any) =>
+      sum +
+      (b.children_actual ?? b.children_planned ?? 0) +
+      (b.adults_actual ?? b.adults_planned ?? 0) +
+      (b.teachers_actual ?? b.teachers_planned ?? 0) +
+      (b.escorts_planned ?? 0),
+    0
+  );
+  const walkIns = (counts ?? []).reduce((s: number, c: any) => s + (c.children ?? 0) + (c.adults ?? 0), 0);
+  const jainMeals = rows.reduce((s: number, b: any) => s + (b.jain_kids ?? 0), 0);
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-lg font-bold">Daily Memo — {label}</h1>
-        <div className="flex items-center gap-2">
+        <div>
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Daily Memo</div>
+          <h1 className="text-xl font-bold tracking-tight">{label}</h1>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
           <DateNav date={date} />
           <a className="btn-outline" href={`/api/pdf/memo/${date}`} target="_blank">
             Memo PDF
@@ -73,13 +88,32 @@ export default async function DailyMemoPage({ searchParams }: { searchParams: { 
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2 text-xs">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div className="stat-tile">
+          <span className="stat-value">{rows.length}</span>
+          <span className="stat-label">Bookings today</span>
+        </div>
+        <div className="stat-tile">
+          <span className="stat-value">{expectedVisitors}</span>
+          <span className="stat-label">Expected group visitors</span>
+        </div>
+        <div className="stat-tile">
+          <span className="stat-value">{walkIns}</span>
+          <span className="stat-label">Ticketed walk-ins</span>
+        </div>
+        <div className="stat-tile">
+          <span className="stat-value">{jainMeals}</span>
+          <span className="stat-label">Jain meals needed</span>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 text-xs">
         {Object.entries({ "10 AM": "blue", "2 PM": "green", "4 PM": "purple", "Flexi": "yellow" }).map(([l, c]) => (
           <span key={l} className="badge" style={{ backgroundColor: SLOT_COLORS[c] }}>
             {l}
           </span>
         ))}
-        <span className="ml-auto text-slate-500">MuSo hours: {settings?.muso_hours ?? "10:00 AM to 7:00 PM"}</span>
+        <span className="ml-auto font-medium text-slate-500">MuSo hours: {settings?.muso_hours ?? "10:00 AM to 7:00 PM"}</span>
       </div>
 
       {vendorLoads.filter((v) => v.exceedsThreshold).map((v) => (
@@ -90,27 +124,37 @@ export default async function DailyMemoPage({ searchParams }: { searchParams: { 
       ))}
 
       {rows.length === 0 ? (
-        <div className="card text-sm text-slate-500">No bookings for this date.</div>
+        <div className="card py-10 text-center">
+          <p className="text-sm font-medium text-slate-500">No bookings for this date.</p>
+          <p className="mt-1 text-xs text-slate-400">Use “+ New booking” to add the first one.</p>
+        </div>
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
           {rows.map((b: any) => (
-            <Link key={b.id} href={`/bookings/${b.id}`} className="card block hover:border-slate-400">
-              <div className="mb-1 flex items-center gap-2">
+            <Link
+              key={b.id}
+              href={`/bookings/${b.id}`}
+              className="card-hover block border-l-4"
+              style={{ borderLeftColor: TYPE_COLORS[b.booking_type] ?? "#475569" }}
+            >
+              <div className="mb-1.5 flex items-center gap-2">
                 <span className="badge" style={{ backgroundColor: TYPE_COLORS[b.booking_type] ?? "#475569" }}>
                   {TYPE_LABELS[b.booking_type] ?? b.booking_type}
                 </span>
                 {b.slot_color && (
                   <span className="h-3 w-3 rounded-full" style={{ backgroundColor: SLOT_COLORS[b.slot_color] }} />
                 )}
-                <span className="ml-auto text-xs uppercase text-slate-400">{b.status}</span>
+                <span className="pill ml-auto bg-slate-100 uppercase tracking-wider text-slate-500">{b.status}</span>
               </div>
-              <div className="font-semibold">{b.name}</div>
-              <div className="text-sm text-slate-600">
-                {fmt12h(b.slot_start)} to {fmt12h(b.slot_end)} · POC {b.ops_poc?.name ?? "NA"}
+              <div className="text-[15px] font-semibold tracking-tight">{b.name}</div>
+              <div className="mt-0.5 text-sm text-slate-600">
+                {fmt12h(b.slot_start)} – {fmt12h(b.slot_end)} · POC {b.ops_poc?.name ?? "NA"}
               </div>
-              <div className="text-sm text-slate-500">
+              <div className="mt-1 text-sm text-slate-500">
                 {b.children_planned ?? 0} children · {b.teachers_planned ?? 0} teachers · {b.adults_planned ?? 0} adults
-                {b.children_actual != null && <span className="text-pink-600"> · actual {b.children_actual}</span>}
+                {b.children_actual != null && (
+                  <span className="ml-1 font-semibold text-pink-600">actual {b.children_actual}</span>
+                )}
               </div>
             </Link>
           ))}
