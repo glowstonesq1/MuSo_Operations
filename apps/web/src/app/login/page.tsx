@@ -41,14 +41,33 @@ export default function LoginPage() {
   async function oauth(provider: "google" | "azure") {
     setError(null);
     const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOAuth({
+    const label = provider === "google" ? "Google" : "Microsoft/Outlook";
+    const { data, error } = await supabase.auth.signInWithOAuth({
       provider,
       options: {
         redirectTo: `${window.location.origin}/auth/callback`,
+        skipBrowserRedirect: true,
         ...(provider === "azure" ? { scopes: "email" } : {}),
       },
     });
-    if (error) setError(error.message);
+    if (error || !data?.url) {
+      setError(error?.message ?? `${label} sign-in failed to start.`);
+      return;
+    }
+    // probe before redirecting so a not-configured provider shows a helpful
+    // message instead of Supabase's raw 400 JSON page
+    try {
+      const probe = await fetch(data.url, { redirect: "manual" });
+      if (probe.status === 400) {
+        setError(
+          `${label} sign-in is not switched on yet. Use email + password, or ask the admin to enable the ${label} provider in Supabase (Authentication -> Providers).`
+        );
+        return;
+      }
+    } catch {
+      // opaque redirect / CORS — provider is configured, continue
+    }
+    window.location.href = data.url;
   }
 
   return (
