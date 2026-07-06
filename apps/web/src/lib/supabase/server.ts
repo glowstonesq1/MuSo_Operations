@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { cache } from "react";
 
 export function createClient() {
   const cookieStore = cookies();
@@ -21,8 +22,10 @@ export function createClient() {
   );
 }
 
-/** Current user's staff row (role, department, staff id) or null. */
-export async function getCurrentStaff() {
+/** Current user's staff row (role, department, staff id) or null.
+ *  React-cached: layout + page share one lookup per request instead of
+ *  each paying a separate round trip to the auth server. */
+export const getCurrentStaff = cache(async () => {
   const supabase = createClient();
   const {
     data: { user },
@@ -34,4 +37,4 @@ export async function getCurrentStaff() {
     .eq("auth_user_id", user.id)
     .maybeSingle();
   return staff ? { ...staff, user } : null;
-}
+});

@@ -7,16 +7,18 @@ import { DEPARTMENTS, ROLES } from "@/lib/labels";
 
 export function StaffRoleEditor({ member }: { member: any }) {
   const router = useRouter();
+  const [name, setName] = useState(member.name);
   const [role, setRole] = useState(member.role);
   const [dept, setDept] = useState(member.department ?? "");
   const [ext, setExt] = useState(member.extension ?? "");
+  const [active, setActive] = useState(member.is_active !== false);
   const [busy, setBusy] = useState(false);
 
   async function saveIt() {
     setBusy(true);
     await createClient()
       .from("staff")
-      .update({ role, department: dept || null, extension: ext || null })
+      .update({ name, role, department: dept || null, extension: ext || null, is_active: active })
       .eq("id", member.id);
     setBusy(false);
     router.refresh();
@@ -24,6 +26,7 @@ export function StaffRoleEditor({ member }: { member: any }) {
 
   return (
     <div className="flex items-center gap-1">
+      <input className="input w-28 text-xs" value={name} onChange={(e) => setName(e.target.value)} />
       <select className="input w-auto text-xs" value={role} onChange={(e) => setRole(e.target.value)}>
         {ROLES.map((r) => <option key={r}>{r}</option>)}
       </select>
@@ -32,6 +35,9 @@ export function StaffRoleEditor({ member }: { member: any }) {
         {DEPARTMENTS.map((d) => <option key={d} value={d}>{d.replace(/_/g, " ")}</option>)}
       </select>
       <input className="input w-16 text-xs" placeholder="ext" value={ext} onChange={(e) => setExt(e.target.value)} />
+      <label className="whitespace-nowrap text-xs text-slate-500">
+        <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} /> active
+      </label>
       <button className="btn-outline text-xs" disabled={busy} onClick={saveIt}>Save</button>
     </div>
   );

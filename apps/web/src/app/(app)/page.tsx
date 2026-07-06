@@ -4,6 +4,7 @@ import { dateLabel, TYPE_COLORS, TYPE_LABELS, SLOT_COLORS } from "@/lib/labels";
 import { fmt12h, dailyMemoWhatsApp, aggregateVendorLoad } from "@muso/logic";
 import { CopyButton } from "@/components/CopyButton";
 import { DateNav } from "@/components/DateNav";
+import { DayOpsEditor } from "@/components/DayOpsEditor";
 
 export const dynamic = "force-dynamic";
 
@@ -150,12 +151,16 @@ export default async function DailyMemoPage({ searchParams }: { searchParams: { 
 
       <div className="flex flex-wrap gap-2">
         <a className="btn-outline" href={`/api/pdf/birthday/${date}`} target="_blank">Birthday FP PDF</a>
-        {staff?.role !== "viewer" && (
+        {["admin", "ops_poc", "sales"].includes(staff?.role) && (
           <Link className="btn-primary" href={`/bookings/new?date=${date}`}>
             + New booking
           </Link>
         )}
       </div>
+
+      {["admin", "ops_poc", "sales"].includes(staff?.role) && (
+        <DayOpsEditor date={date} settings={settings} pocs={pocs ?? []} counts={counts ?? []} />
+      )}
     </div>
   );
 }
