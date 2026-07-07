@@ -31,10 +31,14 @@ export interface PlanInput {
   orientationMinutes?: number; // default 15
   labs: Lab[]; // labs to rotate through (preferred order)
   extraLabs?: Lab[]; // labs that can be pulled in if capacity is short
-  sessionMinutes?: number; // default 70
+  /** one number for equal sessions, or an array (per session slot) when a
+   *  workshop session needs more time than the lab sessions */
+  sessionMinutes?: number | number[]; // default 70
   switchMinutes?: number; // default 5
-  lunchStart?: string | null; // preferred lunch start ("12:35")
+  lunchStart?: string | null; // preferred lunch start ("12:35"); null = no seated lunch
   lunchMinutes?: number; // default 60
+  /** one-way walk to the lunch floor (3rd floor food court); added before AND after lunch */
+  lunchTravelMinutes?: number; // default 0
 }
 
 export interface SessionAssignment {
@@ -82,11 +86,15 @@ export function splitIntoGroups(children: number, numGroups: number): number[] {
 }
 
 export function generateMovementPlan(input: PlanInput): PlanResult {
-  const sessionMinutes = input.sessionMinutes ?? 70;
   const switchMinutes = input.switchMinutes ?? 5;
   const lunchMinutes = input.lunchMinutes ?? 60;
+  const lunchTravel = input.lunchTravelMinutes ?? 0;
   const orientationMinutes = input.orientationMinutes ?? 15;
   const warnings: PlanWarning[] = [];
+  const sessionLen = (s: number): number =>
+    Array.isArray(input.sessionMinutes)
+      ? input.sessionMinutes[s] ?? input.sessionMinutes[input.sessionMinutes.length - 1] ?? 70
+      : input.sessionMinutes ?? 70;
 
   // 1) pick labs / group count
   let labs = [...input.labs];
@@ -128,13 +136,13 @@ export function generateMovementPlan(input: PlanInput): PlanResult {
   const sessions: PlanSession[] = [];
   for (let s = 0; s < numGroups; s++) {
     // insert lunch before this session if the target time has been reached
-    if (lunchTarget != null && lunch == null && toMinutes(cursor) + sessionMinutes > lunchTarget + lunchMinutes / 2) {
-      const lunchFrom = toHM(Math.max(toMinutes(cursor), lunchTarget));
+    if (lunchTarget != null && lunch == null && toMinutes(cursor) + sessionLen(s) > lunchTarget + lunchMinutes / 2) {
+      const lunchFrom = toHM(Math.max(toMinutes(cursor) + lunchTravel, lunchTarget));
       lunch = { fromTime: lunchFrom, toTime: addMinutes(lunchFrom, lunchMinutes) };
-      cursor = addMinutes(lunch.toTime, switchMinutes);
+      cursor = addMinutes(lunch.toTime, lunchTravel + switchMinutes);
     }
     const from = cursor;
-    const to = addMinutes(from, sessionMinutes);
+    const to = addMinutes(from, sessionLen(s));
     sessions.push({
       sessionNumber: s + 1,
       fromTime: from,

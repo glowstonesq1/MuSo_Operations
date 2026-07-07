@@ -7,6 +7,7 @@ import { CopyButton } from "@/components/CopyButton";
 import { MovementPlanPanel } from "@/components/MovementPlanPanel";
 import { BookingActions } from "@/components/BookingActions";
 import { AsksEditor } from "@/components/AsksEditor";
+import { AskStatus } from "@/components/AskStatus";
 
 export const dynamic = "force-dynamic";
 
@@ -120,6 +121,11 @@ export default async function BookingDetailPage({ params }: { params: { id: stri
           >
             Floor Plan PDF
           </a>
+          {b.booking_type !== "birthday" && (
+            <a className="btn-outline" href={`/api/doc/${isSchoolish ? "school-fp" : "event"}/${b.id}`}>
+              DOC
+            </a>
+          )}
           <CopyButton text={whatsapp} />
         </div>
       </div>
@@ -230,7 +236,13 @@ export default async function BookingDetailPage({ params }: { params: { id: stri
                   <td className="py-1 pr-3 font-semibold">{a.department.replace(/_/g, " ")}</td>
                   <td className="py-1 pr-3">{a.asks_text}</td>
                   <td className="py-1 pr-3 text-slate-500">{a.poc?.name ?? "—"}</td>
-                  <td className="py-1 text-xs uppercase text-slate-400">{a.status}</td>
+                  <td className="py-1">
+                    <AskStatus
+                      askId={a.id}
+                      status={a.status}
+                      canEdit={!!me && (["admin", "ops_poc", "sales"].includes(me.role) || (me.role === "department_head" && me.department === a.department))}
+                    />
+                  </td>
                 </tr>
               ))}
             </tbody>

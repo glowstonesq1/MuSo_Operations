@@ -3,6 +3,7 @@ import { DEPARTMENTS, dateLabel } from "@/lib/labels";
 import { fmt12h, deptBriefWhatsApp, aggregateVendorLoad } from "@muso/logic";
 import { CopyButton } from "@/components/CopyButton";
 import { DateNav } from "@/components/DateNav";
+import { AskStatus } from "@/components/AskStatus";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -63,7 +64,10 @@ export default async function DepartmentsPage({
         <div className="flex gap-2">
           <DateNav date={date} />
           {!showAll && (
-            <a className="btn-outline" target="_blank" href={`/api/pdf/dept-brief/${date}/${dept}`}>Brief PDF</a>
+            <>
+              <a className="btn-outline" target="_blank" href={`/api/pdf/dept-brief/${date}/${dept}`}>Brief PDF</a>
+              <a className="btn-outline" href={`/api/doc/dept-brief/${date}?dept=${dept}`}>DOC</a>
+            </>
           )}
           <CopyButton text={whatsapp} />
         </div>
@@ -111,7 +115,17 @@ export default async function DepartmentsPage({
                   <td className="whitespace-nowrap">{fmt12h(a.booking.slot_start)}–{fmt12h(a.booking.slot_end)}</td>
                   <td className="whitespace-pre-wrap">{a.asks_text}</td>
                   <td>{a.poc?.name ?? "—"}</td>
-                  <td><span className="pill bg-slate-100 uppercase tracking-wider text-slate-500">{a.status}</span></td>
+                  <td>
+                    <AskStatus
+                      askId={a.id}
+                      status={a.status}
+                      canEdit={
+                        !!me &&
+                        (["admin", "ops_poc", "sales"].includes(me.role) ||
+                          (me.role === "department_head" && me.department === a.department))
+                      }
+                    />
+                  </td>
                 </tr>
               ))}
             </tbody>

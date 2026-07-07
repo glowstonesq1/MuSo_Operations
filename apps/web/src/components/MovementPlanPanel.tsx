@@ -26,8 +26,13 @@ export function MovementPlanPanel({
     spaces.filter((s) => DEFAULT_LABS.includes(s.name)).map((s) => s.id)
   );
   const [sessionMin, setSessionMin] = useState(70);
+  const [perSession, setPerSession] = useState(false);
+  const [sessionMins, setSessionMins] = useState<number[]>([70, 70, 70]);
   const [switchMin, setSwitchMin] = useState(5);
-  const [includeLunch, setIncludeLunch] = useState(true);
+  const [lunchMode, setLunchMode] = useState<"seated" | "takeaway" | "none">("seated");
+  const [lunchMin, setLunchMin] = useState(60);
+  const [lunchTravel, setLunchTravel] = useState(5);
+  const [lunchPoc, setLunchPoc] = useState("");
   const [note, setNote] = useState("");
 
   const [preview, setPreview] = useState<any>(null);
@@ -38,9 +43,12 @@ export function MovementPlanPanel({
 
   const options = () => ({
     lab_ids: selected,
-    session_minutes: sessionMin,
+    session_minutes: perSession ? sessionMins.slice(0, selected.length) : sessionMin,
     switch_minutes: switchMin,
-    include_lunch: includeLunch,
+    lunch_mode: lunchMode,
+    lunch_minutes: lunchMin,
+    lunch_travel_minutes: lunchMode === "seated" ? lunchTravel : 0,
+    lunch_poc: lunchPoc || undefined,
     note: note || undefined,
   });
 
@@ -135,26 +143,76 @@ export function MovementPlanPanel({
               ))}
             </div>
           </div>
-          <div className="grid gap-3 sm:grid-cols-4">
-            <div>
-              <span className="label">Session (min)</span>
-              <input className="input" type="number" min={20} value={sessionMin} onChange={(e) => setSessionMin(Number(e.target.value))} />
+          <div className="mb-3 grid gap-3 sm:grid-cols-3">
+            <div className="sm:col-span-2">
+              <span className="label">Session durations</span>
+              <div className="flex flex-wrap items-center gap-2">
+                {!perSession ? (
+                  <input className="input w-24" type="number" min={20} value={sessionMin} onChange={(e) => setSessionMin(Number(e.target.value))} />
+                ) : (
+                  selected.map((_, i) => (
+                    <div key={i} className="flex items-center gap-1">
+                      <span className="text-xs text-slate-400">S{i + 1}</span>
+                      <input
+                        className="input w-20"
+                        type="number"
+                        min={20}
+                        value={sessionMins[i] ?? sessionMin}
+                        onChange={(e) =>
+                          setSessionMins((prev) => {
+                            const next = [...prev];
+                            next[i] = Number(e.target.value);
+                            return next;
+                          })
+                        }
+                      />
+                    </div>
+                  ))
+                )}
+                <label className="flex items-center gap-1.5 text-xs text-slate-500">
+                  <input type="checkbox" checked={perSession} onChange={(e) => setPerSession(e.target.checked)} />
+                  different per session (e.g. workshop needs longer)
+                </label>
+              </div>
             </div>
             <div>
-              <span className="label">Switch (min)</span>
-              <input className="input" type="number" min={0} value={switchMin} onChange={(e) => setSwitchMin(Number(e.target.value))} />
+              <span className="label">Switch between floors (min)</span>
+              <input className="input w-24" type="number" min={0} value={switchMin} onChange={(e) => setSwitchMin(Number(e.target.value))} />
             </div>
+          </div>
+
+          <div className="mb-3 grid gap-3 sm:grid-cols-4">
             <div>
-              <span className="label">Lunch break</span>
-              <label className="flex h-9 items-center gap-2 text-sm text-slate-600">
-                <input type="checkbox" checked={includeLunch} onChange={(e) => setIncludeLunch(e.target.checked)} />
-                include
-              </label>
+              <span className="label">Food arrangement</span>
+              <select className="input" value={lunchMode} onChange={(e) => setLunchMode(e.target.value as any)}>
+                <option value="seated">Seated lunch (food court)</option>
+                <option value="takeaway">Food box takeaway at exit</option>
+                <option value="none">No food break</option>
+              </select>
             </div>
-            <div>
-              <span className="label">Conditions note (logged)</span>
-              <input className="input" placeholder="e.g. raining — terrace closed" value={note} onChange={(e) => setNote(e.target.value)} />
-            </div>
+            {lunchMode === "seated" && (
+              <>
+                <div>
+                  <span className="label">Lunch duration (min)</span>
+                  <input className="input" type="number" min={15} value={lunchMin} onChange={(e) => setLunchMin(Number(e.target.value))} />
+                </div>
+                <div>
+                  <span className="label">Walk to food floor (min, each way)</span>
+                  <input className="input" type="number" min={0} value={lunchTravel} onChange={(e) => setLunchTravel(Number(e.target.value))} />
+                </div>
+              </>
+            )}
+            {lunchMode !== "none" && (
+              <div>
+                <span className="label">{lunchMode === "takeaway" ? "Takeaway responsible" : "Lunch responsible"}</span>
+                <input className="input" placeholder="e.g. Aniket | Sawood" value={lunchPoc} onChange={(e) => setLunchPoc(e.target.value)} />
+              </div>
+            )}
+          </div>
+
+          <div>
+            <span className="label">Conditions note (logged to history)</span>
+            <input className="input" placeholder="e.g. raining — terrace closed; workshop needs 90 min" value={note} onChange={(e) => setNote(e.target.value)} />
           </div>
         </div>
       )}

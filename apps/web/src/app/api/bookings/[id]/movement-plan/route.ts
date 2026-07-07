@@ -10,9 +10,14 @@ const EXTRA_LAB_NAMES = ["Grow Lab"];
  *  to: which spaces rotate, how long each session is, and whether lunch fits. */
 interface PlanOptions {
   lab_ids?: string[];
-  session_minutes?: number;
+  /** one number, or per-session array when a workshop slot needs more time */
+  session_minutes?: number | number[];
   switch_minutes?: number;
-  include_lunch?: boolean;
+  /** seated = break in the middle (3rd floor); takeaway = food box at exit; none */
+  lunch_mode?: "seated" | "takeaway" | "none";
+  lunch_minutes?: number;
+  lunch_travel_minutes?: number;
+  lunch_poc?: string;
   note?: string;
 }
 
@@ -38,7 +43,7 @@ async function buildPlan(
   }
   if (labs.length < 1) return { error: "Select at least one space to rotate through." };
 
-  const includeLunch = opts.include_lunch ?? !!b.kids_lunch_time;
+  const lunchMode = opts.lunch_mode ?? (b.kids_lunch_time ? "seated" : "none");
   const plan = generateMovementPlan({
     children: b.children_actual ?? b.children_planned ?? 0,
     slotStart: b.slot_start.slice(0, 5),
@@ -48,7 +53,10 @@ async function buildPlan(
     extraLabs: extra.map((l) => ({ id: l.id, name: l.name, capacity: l.capacity })),
     sessionMinutes: opts.session_minutes ?? 70,
     switchMinutes: opts.switch_minutes ?? 5,
-    lunchStart: includeLunch && b.kids_lunch_time ? add5(b.kids_lunch_time.slice(0, 5)) : null,
+    lunchStart:
+      lunchMode === "seated" && b.kids_lunch_time ? add5(b.kids_lunch_time.slice(0, 5)) : null,
+    lunchMinutes: opts.lunch_minutes ?? 60,
+    lunchTravelMinutes: opts.lunch_travel_minutes ?? 0,
   });
   return { plan, booking: b };
 }
@@ -88,7 +96,9 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     .insert({
       booking_id: params.id,
       num_groups: plan.numGroups,
-      session_duration_minutes: body.session_minutes ?? 70,
+      session_duration_minutes: Array.isArray(body.session_minutes)
+        ? body.session_minutes[0] ?? 70
+        : body.session_minutes ?? 70,
       switch_duration_minutes: body.switch_minutes ?? 5,
       lunch_start: plan.lunch?.fromTime ?? null,
       lunch_end: plan.lunch?.toTime ?? null,
@@ -112,13 +122,31 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   const { error: sErr } = await supabase.from("movement_plan_sessions").insert(sessionRows);
   if (sErr) return NextResponse.json({ error: sErr.message }, { status: 400 });
 
-  await supabase.from("movement_plan_tasks").insert([
+  const lunchMode = body.lunch_mode ?? (booking.kids_lunch_time ? "seated" : "none");
+  const taskRows: any[] = [
     { movement_plan_id: mp.id, sort_order: 1, task: "Bus Deboarding & Parking", timing_text: booking.bus_reporting_time?.slice(0, 5) ?? null },
     { movement_plan_id: mp.id, sort_order: 2, task: "Transportation to Commons", timing_text: null },
     { movement_plan_id: mp.id, sort_order: 3, task: "Welcoming & Orientation", timing_text: booking.orientation_time?.slice(0, 5) ?? null },
-    { movement_plan_id: mp.id, sort_order: 4, task: "Lunch", timing_text: plan.lunch ? `${plan.lunch.fromTime} to ${plan.lunch.toTime}` : null },
-    { movement_plan_id: mp.id, sort_order: 5, task: "Feedback & Exit", timing_text: `${plan.exitTime} onwards` },
-  ]);
+  ];
+  if (lunchMode === "seated" && plan.lunch) {
+    taskRows.push({
+      movement_plan_id: mp.id,
+      sort_order: 4,
+      task: `Lunch (${booking.food_location ?? "3rd floor"})`,
+      timing_text: `${plan.lunch.fromTime} to ${plan.lunch.toTime}${body.lunch_travel_minutes ? ` (+${body.lunch_travel_minutes} min walk each way)` : ""}`,
+      person_names: body.lunch_poc ?? null,
+    });
+  } else if (lunchMode === "takeaway") {
+    taskRows.push({
+      movement_plan_id: mp.id,
+      sort_order: 4,
+      task: "Food box takeaway at exit",
+      timing_text: `${plan.exitTime} onwards`,
+      person_names: body.lunch_poc ?? null,
+    });
+  }
+  taskRows.push({ movement_plan_id: mp.id, sort_order: 5, task: "Feedback & Exit", timing_text: `${plan.exitTime} onwards` });
+  await supabase.from("movement_plan_tasks").insert(taskRows);
 
   await supabase.from("resource_bookings").delete().eq("booking_id", params.id).not("group_label", "is", null);
   const rbRows = plan.sessions.flatMap((s) =>

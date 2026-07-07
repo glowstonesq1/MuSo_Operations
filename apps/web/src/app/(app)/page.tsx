@@ -84,6 +84,9 @@ export default async function DailyMemoPage({ searchParams }: { searchParams: { 
           <a className="btn-outline" href={`/api/pdf/memo/${date}`} target="_blank">
             Memo PDF
           </a>
+          <a className="btn-outline" href={`/api/doc/memo/${date}`}>
+            DOC
+          </a>
           <CopyButton text={whatsapp} />
         </div>
       </div>
@@ -195,6 +198,7 @@ export default async function DailyMemoPage({ searchParams }: { searchParams: { 
 
       <div className="flex flex-wrap gap-2">
         <a className="btn-outline" href={`/api/pdf/birthday/${date}`} target="_blank">Birthday FP PDF</a>
+        <a className="btn-outline" href={`/api/doc/birthday/${date}`}>Birthday FP DOC</a>
         {["admin", "ops_poc", "sales"].includes(staff?.role) && (
           <Link className="btn-primary" href={`/bookings/new?date=${date}`}>
             + New booking
