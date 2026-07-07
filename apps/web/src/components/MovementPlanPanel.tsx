@@ -32,6 +32,7 @@ export function MovementPlanPanel({
   const [lunchMode, setLunchMode] = useState<"seated" | "takeaway" | "none">("seated");
   const [lunchMin, setLunchMin] = useState(60);
   const [lunchTravel, setLunchTravel] = useState(5);
+  const [lunchPlacement, setLunchPlacement] = useState<string>("auto"); // "auto" | "0" | "1" | …
   const [lunchPoc, setLunchPoc] = useState("");
   const [note, setNote] = useState("");
 
@@ -48,6 +49,7 @@ export function MovementPlanPanel({
     lunch_mode: lunchMode,
     lunch_minutes: lunchMin,
     lunch_travel_minutes: lunchMode === "seated" ? lunchTravel : 0,
+    lunch_after_session: lunchPlacement === "auto" ? undefined : Number(lunchPlacement),
     lunch_poc: lunchPoc || undefined,
     note: note || undefined,
   });
@@ -192,6 +194,18 @@ export function MovementPlanPanel({
             </div>
             {lunchMode === "seated" && (
               <>
+                <div>
+                  <span className="label">Lunch placement</span>
+                  <select className="input" value={lunchPlacement} onChange={(e) => setLunchPlacement(e.target.value)}>
+                    <option value="auto">Auto (by kids' lunch time)</option>
+                    <option value="0">At the start (before S1)</option>
+                    {selected.map((_, i) => (
+                      <option key={i} value={String(i + 1)}>
+                        {i + 1 === selected.length ? "After the last session" : `Between S${i + 1} and S${i + 2}`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <div>
                   <span className="label">Lunch duration (min)</span>
                   <input className="input" type="number" min={15} value={lunchMin} onChange={(e) => setLunchMin(Number(e.target.value))} />

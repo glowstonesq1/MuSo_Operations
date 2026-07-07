@@ -110,6 +110,45 @@ describe("movement plan generator", () => {
     expect(shifted.exitTime).toBe("15:20");
   });
 
+  it("places lunch at the start when lunchAfterSession = 0", () => {
+    const plan = generateMovementPlan({ ...input, lunchAfterSession: 0 });
+    // orientation 9:45 + 15 + 5 = 10:05, lunch first, then sessions
+    expect(plan.lunch!.fromTime).toBe("10:05");
+    expect(plan.sessions[0].fromTime > plan.lunch!.toTime).toBe(true);
+  });
+
+  it("places lunch between S2 and S3 when lunchAfterSession = 2", () => {
+    const plan = generateMovementPlan({ ...input, lunchAfterSession: 2 });
+    expect(plan.lunch!.fromTime >= plan.sessions[1].toTime).toBe(true);
+    expect(plan.sessions[2].fromTime >= plan.lunch!.toTime).toBe(true);
+  });
+
+  it("places lunch after the last session when lunchAfterSession = numGroups", () => {
+    const plan = generateMovementPlan({ ...input, lunchAfterSession: 3 });
+    expect(plan.lunch!.fromTime >= plan.sessions[2].toTime).toBe(true);
+    expect(plan.exitTime).toBe(plan.lunch!.toTime);
+  });
+
+  it("adds travel buffer around a seated lunch", () => {
+    const withTravel = generateMovementPlan({ ...input, lunchAfterSession: 2, lunchTravelMinutes: 10 });
+    const without = generateMovementPlan({ ...input, lunchAfterSession: 2 });
+    // 10 min before + 10 min after = session 3 starts 20 min later
+    const diff =
+      (Number(withTravel.sessions[2].fromTime.slice(0, 2)) * 60 + Number(withTravel.sessions[2].fromTime.slice(3))) -
+      (Number(without.sessions[2].fromTime.slice(0, 2)) * 60 + Number(without.sessions[2].fromTime.slice(3)));
+    expect(diff).toBe(20);
+  });
+
+  it("supports per-session durations (workshop slot longer)", () => {
+    const plan = generateMovementPlan({ ...input, sessionMinutes: [70, 90, 70], lunchStart: null });
+    const dur = (s: any) =>
+      Number(s.toTime.slice(0, 2)) * 60 + Number(s.toTime.slice(3)) -
+      (Number(s.fromTime.slice(0, 2)) * 60 + Number(s.fromTime.slice(3)));
+    expect(dur(plan.sessions[0])).toBe(70);
+    expect(dur(plan.sessions[1])).toBe(90);
+    expect(dur(plan.sessions[2])).toBe(70);
+  });
+
   it("splits remainders to earlier groups", () => {
     expect(splitIntoGroups(211, 3)).toEqual([71, 70, 70]);
     expect(splitIntoGroups(150, 3)).toEqual([50, 50, 50]);

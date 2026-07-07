@@ -17,6 +17,8 @@ interface PlanOptions {
   lunch_mode?: "seated" | "takeaway" | "none";
   lunch_minutes?: number;
   lunch_travel_minutes?: number;
+  /** 0 = at the start, 1 = after S1, …, N = after last session; omit = auto by lunch time */
+  lunch_after_session?: number;
   lunch_poc?: string;
   note?: string;
 }
@@ -57,6 +59,10 @@ async function buildPlan(
       lunchMode === "seated" && b.kids_lunch_time ? add5(b.kids_lunch_time.slice(0, 5)) : null,
     lunchMinutes: opts.lunch_minutes ?? 60,
     lunchTravelMinutes: opts.lunch_travel_minutes ?? 0,
+    lunchAfterSession:
+      lunchMode === "seated" && typeof opts.lunch_after_session === "number"
+        ? opts.lunch_after_session
+        : undefined,
   });
   return { plan, booking: b };
 }

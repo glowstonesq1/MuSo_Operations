@@ -39,6 +39,10 @@ export interface PlanInput {
   lunchMinutes?: number; // default 60
   /** one-way walk to the lunch floor (3rd floor food court); added before AND after lunch */
   lunchTravelMinutes?: number; // default 0
+  /** explicit lunch placement: 0 = at the start (before S1), 1 = after S1,
+   *  2 = between S2 and S3, …, numGroups = after the last session.
+   *  undefined = automatic, positioned by lunchStart time. */
+  lunchAfterSession?: number;
 }
 
 export interface SessionAssignment {
@@ -131,15 +135,32 @@ export function generateMovementPlan(input: PlanInput): PlanResult {
   const orientationStart = input.orientationTime ?? addMinutes(input.slotStart, 15);
   let cursor = addMinutes(orientationStart, orientationMinutes + 5); // 5 min to move to first lab
   const lunchTarget = input.lunchStart ? toMinutes(input.lunchStart) : null;
+  const explicitLunch =
+    typeof input.lunchAfterSession === "number" ? input.lunchAfterSession : null;
+  const wantLunch = explicitLunch != null || lunchTarget != null;
   let lunch: { fromTime: string; toTime: string } | null = null;
+
+  const insertLunch = () => {
+    const from =
+      explicitLunch != null
+        ? toHM(toMinutes(cursor) + lunchTravel)
+        : toHM(Math.max(toMinutes(cursor) + lunchTravel, lunchTarget!));
+    lunch = { fromTime: from, toTime: addMinutes(from, lunchMinutes) };
+    cursor = addMinutes(lunch.toTime, lunchTravel + switchMinutes);
+  };
 
   const sessions: PlanSession[] = [];
   for (let s = 0; s < numGroups; s++) {
-    // insert lunch before this session if the target time has been reached
-    if (lunchTarget != null && lunch == null && toMinutes(cursor) + sessionLen(s) > lunchTarget + lunchMinutes / 2) {
-      const lunchFrom = toHM(Math.max(toMinutes(cursor) + lunchTravel, lunchTarget));
-      lunch = { fromTime: lunchFrom, toTime: addMinutes(lunchFrom, lunchMinutes) };
-      cursor = addMinutes(lunch.toTime, lunchTravel + switchMinutes);
+    // lunch goes before this session when explicitly placed here, or (auto
+    // mode) when the target lunch time would fall inside this session
+    if (
+      wantLunch &&
+      lunch == null &&
+      (explicitLunch != null
+        ? s === explicitLunch
+        : toMinutes(cursor) + sessionLen(s) > lunchTarget! + lunchMinutes / 2)
+    ) {
+      insertLunch();
     }
     const from = cursor;
     const to = addMinutes(from, sessionLen(s));
@@ -161,14 +182,22 @@ export function generateMovementPlan(input: PlanInput): PlanResult {
     cursor = addMinutes(to, switchMinutes);
   }
 
-  if (lunchTarget != null && lunch == null) {
+  // explicit "after the last session" placement
+  if (wantLunch && lunch == null && explicitLunch != null && explicitLunch >= numGroups) {
+    insertLunch();
+  }
+  if (wantLunch && lunch == null && explicitLunch == null) {
     warnings.push({
       code: "no_lunch_fit",
       message: "Lunch window did not fit between sessions; schedule it manually.",
     });
   }
 
-  const exitTime = sessions.length ? sessions[sessions.length - 1].toTime : input.slotStart;
+  const lastSessionEnd = sessions.length ? sessions[sessions.length - 1].toTime : input.slotStart;
+  const exitTime =
+    lunch && toMinutes((lunch as { toTime: string }).toTime) > toMinutes(lastSessionEnd)
+      ? (lunch as { toTime: string }).toTime
+      : lastSessionEnd;
   if (toMinutes(exitTime) > toMinutes(input.slotEnd) + 30) {
     const overrun = toMinutes(exitTime) - toMinutes(input.slotEnd);
     warnings.push({
