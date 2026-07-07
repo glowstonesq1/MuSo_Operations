@@ -16,13 +16,15 @@ export default async function DepartmentsPage({
   const me = await getCurrentStaff();
   const date = searchParams.date ?? new Date().toISOString().slice(0, 10);
   // department heads are locked to their own department by RLS anyway
-  const dept = me?.role === "department_head" && me.department ? me.department : searchParams.dept ?? "housekeeping";
+  const dept = me?.role === "department_head" && me.department ? me.department : searchParams.dept ?? "all";
+  const showAll = dept === "all";
 
-  const { data: asks } = await supabase
+  let asksQuery = supabase
     .from("department_asks")
     .select("*, poc:staff(name), booking:bookings!inner(id, name, visit_date, slot_start, slot_end, food_vendor, children_planned, adults_planned, teachers_planned)")
-    .eq("department", dept)
     .eq("booking.visit_date", date);
+  if (!showAll) asksQuery = asksQuery.eq("department", dept);
+  const { data: asks } = await asksQuery.order("department");
 
   // Case 6 — F&B dashboard shows aggregated vendor orders
   let vendorLoads: ReturnType<typeof aggregateVendorLoad> = [];
@@ -43,10 +45,10 @@ export default async function DepartmentsPage({
   }
 
   const whatsapp = deptBriefWhatsApp(
-    dept.replace(/_/g, " "),
+    showAll ? "All Departments" : dept.replace(/_/g, " "),
     dateLabel(date),
     (asks ?? []).map((a: any) => ({
-      bookingName: a.booking.name,
+      bookingName: `${showAll ? `[${a.department.replace(/_/g, " ")}] ` : ""}${a.booking.name}`,
       timing: `${fmt12h(a.booking.slot_start)} to ${fmt12h(a.booking.slot_end)}`,
       asksText: a.asks_text,
       poc: a.poc?.name,
@@ -60,13 +62,21 @@ export default async function DepartmentsPage({
         <h1 className="text-lg font-bold">Department briefs — {dateLabel(date)}</h1>
         <div className="flex gap-2">
           <DateNav date={date} />
-          <a className="btn-outline" target="_blank" href={`/api/pdf/dept-brief/${date}/${dept}`}>Brief PDF</a>
+          {!showAll && (
+            <a className="btn-outline" target="_blank" href={`/api/pdf/dept-brief/${date}/${dept}`}>Brief PDF</a>
+          )}
           <CopyButton text={whatsapp} />
         </div>
       </div>
 
       {me?.role !== "department_head" && (
         <div className="flex flex-wrap gap-1">
+          <Link
+            href={`/departments?date=${date}&dept=all`}
+            className={`btn-outline text-xs ${showAll ? "!bg-slate-900 !text-white" : ""}`}
+          >
+            All departments
+          </Link>
           {DEPARTMENTS.map((d) => (
             <Link
               key={d}
@@ -80,22 +90,28 @@ export default async function DepartmentsPage({
       )}
 
       <div className="card">
-        <h2 className="mb-2 text-sm font-bold uppercase">{dept.replace(/_/g, " ")} asks</h2>
+        <h2 className="section-title uppercase">{showAll ? "All departments" : dept.replace(/_/g, " ")} — asks</h2>
         {(asks ?? []).length === 0 ? (
-          <p className="text-sm text-slate-400">No asks for this department on this date.</p>
+          <p className="text-sm text-slate-400">No asks on this date.</p>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="text-left text-xs uppercase text-slate-500">
-              <tr><th className="py-1 pr-3">Booking</th><th className="py-1 pr-3">Timing</th><th className="py-1 pr-3">Ask</th><th className="py-1 pr-3">POC</th><th>Status</th></tr>
+          <table className="table-modern">
+            <thead>
+              <tr>
+                {showAll && <th>Department</th>}
+                <th>Booking</th><th>Timing</th><th>Ask</th><th>POC</th><th>Status</th>
+              </tr>
             </thead>
             <tbody>
               {(asks ?? []).map((a: any) => (
-                <tr key={a.id} className="border-t border-slate-100 align-top">
-                  <td className="py-1.5 pr-3 font-medium">{a.booking.name}</td>
-                  <td className="py-1.5 pr-3 whitespace-nowrap">{fmt12h(a.booking.slot_start)}–{fmt12h(a.booking.slot_end)}</td>
-                  <td className="py-1.5 pr-3 whitespace-pre-wrap">{a.asks_text}</td>
-                  <td className="py-1.5 pr-3">{a.poc?.name ?? "—"}</td>
-                  <td className="py-1.5 text-xs uppercase text-slate-500">{a.status}</td>
+                <tr key={a.id} className="align-top">
+                  {showAll && (
+                    <td><span className="pill bg-slate-100 text-slate-600">{a.department.replace(/_/g, " ")}</span></td>
+                  )}
+                  <td className="font-semibold">{a.booking.name}</td>
+                  <td className="whitespace-nowrap">{fmt12h(a.booking.slot_start)}–{fmt12h(a.booking.slot_end)}</td>
+                  <td className="whitespace-pre-wrap">{a.asks_text}</td>
+                  <td>{a.poc?.name ?? "—"}</td>
+                  <td><span className="pill bg-slate-100 uppercase tracking-wider text-slate-500">{a.status}</span></td>
                 </tr>
               ))}
             </tbody>

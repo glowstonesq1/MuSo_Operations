@@ -3,19 +3,59 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-/** Generate -> preview (with Case 5 capacity warnings + options) -> confirm & save. */
-export function MovementPlanPanel({ bookingId, hasPlan }: { bookingId: string; hasPlan: boolean }) {
+/**
+ * Conditions -> Generate -> preview (with Case 5 capacity warnings) -> confirm.
+ * Conditions cover the real-world cases: rain closes a floor, a school books
+ * only a workshop or a dedicated lab, shorter sessions, no lunch, etc.
+ */
+
+const DEFAULT_LABS = ["Play Lab", "Discover Lab", "Make Lab"];
+
+export function MovementPlanPanel({
+  bookingId,
+  hasPlan,
+  spaces,
+}: {
+  bookingId: string;
+  hasPlan: boolean;
+  spaces: { id: string; name: string; capacity: number | null }[];
+}) {
   const router = useRouter();
+  const [showOptions, setShowOptions] = useState(false);
+  const [selected, setSelected] = useState<string[]>(
+    spaces.filter((s) => DEFAULT_LABS.includes(s.name)).map((s) => s.id)
+  );
+  const [sessionMin, setSessionMin] = useState(70);
+  const [switchMin, setSwitchMin] = useState(5);
+  const [includeLunch, setIncludeLunch] = useState(true);
+  const [note, setNote] = useState("");
+
   const [preview, setPreview] = useState<any>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reason, setReason] = useState("");
   const [narrative, setNarrative] = useState<string | null>(null);
 
+  const options = () => ({
+    lab_ids: selected,
+    session_minutes: sessionMin,
+    switch_minutes: switchMin,
+    include_lunch: includeLunch,
+    note: note || undefined,
+  });
+
   async function generate() {
+    if (selected.length === 0) {
+      setError("Pick at least one space for the rotation.");
+      return;
+    }
     setBusy(true);
     setError(null);
-    const res = await fetch(`/api/bookings/${bookingId}/movement-plan`, { method: "POST" });
+    const res = await fetch(`/api/bookings/${bookingId}/movement-plan`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(options()),
+    });
     const data = await res.json();
     setBusy(false);
     if (!res.ok) return setError(data.error);
@@ -29,7 +69,7 @@ export function MovementPlanPanel({ bookingId, hasPlan }: { bookingId: string; h
     const res = await fetch(`/api/bookings/${bookingId}/movement-plan`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ accepted_warnings: accepted, reason }),
+      body: JSON.stringify({ ...options(), accepted_warnings: accepted, reason }),
     });
     const data = await res.json();
     setBusy(false);
@@ -38,9 +78,15 @@ export function MovementPlanPanel({ bookingId, hasPlan }: { bookingId: string; h
     router.refresh();
   }
 
+  const toggleSpace = (id: string) =>
+    setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap gap-2">
+        <button className="btn-outline" onClick={() => setShowOptions((v) => !v)}>
+          {showOptions ? "Hide conditions" : "Set conditions"}
+        </button>
         <button className="btn-primary" disabled={busy} onClick={generate}>
           {busy ? "Working…" : hasPlan ? "Regenerate movement plan" : "Generate movement plan"}
         </button>
@@ -64,17 +110,67 @@ export function MovementPlanPanel({ bookingId, hasPlan }: { bookingId: string; h
           </button>
         )}
       </div>
+
+      {showOptions && (
+        <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 text-sm">
+          <p className="mb-2 font-semibold text-slate-700">
+            Conditions for this visit <span className="font-normal text-slate-400">(rain, dedicated floor, workshop-only…)</span>
+          </p>
+          <div className="mb-3">
+            <span className="label">Spaces in the rotation (groups = spaces picked)</span>
+            <div className="flex flex-wrap gap-2">
+              {spaces.map((s) => (
+                <label
+                  key={s.id}
+                  className={`cursor-pointer rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                    selected.includes(s.id)
+                      ? "border-slate-900 bg-slate-900 text-white"
+                      : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                  }`}
+                >
+                  <input type="checkbox" className="hidden" checked={selected.includes(s.id)} onChange={() => toggleSpace(s.id)} />
+                  {s.name}
+                  {s.capacity ? <span className="opacity-60"> · {s.capacity}</span> : null}
+                </label>
+              ))}
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-4">
+            <div>
+              <span className="label">Session (min)</span>
+              <input className="input" type="number" min={20} value={sessionMin} onChange={(e) => setSessionMin(Number(e.target.value))} />
+            </div>
+            <div>
+              <span className="label">Switch (min)</span>
+              <input className="input" type="number" min={0} value={switchMin} onChange={(e) => setSwitchMin(Number(e.target.value))} />
+            </div>
+            <div>
+              <span className="label">Lunch break</span>
+              <label className="flex h-9 items-center gap-2 text-sm text-slate-600">
+                <input type="checkbox" checked={includeLunch} onChange={(e) => setIncludeLunch(e.target.checked)} />
+                include
+              </label>
+            </div>
+            <div>
+              <span className="label">Conditions note (logged)</span>
+              <input className="input" placeholder="e.g. raining — terrace closed" value={note} onChange={(e) => setNote(e.target.value)} />
+            </div>
+          </div>
+        </div>
+      )}
+
       {error && <p className="text-sm text-red-600">{error}</p>}
       {narrative && (
-        <div className="rounded-md border border-sky-200 bg-sky-50 p-3 text-sm">
+        <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm">
           <p className="mb-1 font-semibold text-sky-900">Suggested description (copy if you like it):</p>
           <p className="whitespace-pre-wrap">{narrative}</p>
         </div>
       )}
       {preview && (
-        <div className="rounded-md border border-slate-300 bg-slate-50 p-3 text-sm">
+        <div className="rounded-xl border border-slate-300 bg-slate-50 p-4 text-sm">
           <p className="font-semibold">
-            Preview — {preview.numGroups} groups ({preview.groupSizes.map((g: any) => `${g.label}: ${g.size}`).join(", ")})
+            Preview — {preview.numGroups} group{preview.numGroups > 1 ? "s" : ""} (
+            {preview.groupSizes.map((g: any) => `${g.label}: ${g.size}`).join(", ")})
           </p>
           <table className="mt-2 w-full text-xs">
             <tbody>
@@ -94,10 +190,14 @@ export function MovementPlanPanel({ bookingId, hasPlan }: { bookingId: string; h
                   <td className="py-1">{preview.lunch.fromTime}–{preview.lunch.toTime}</td>
                 </tr>
               )}
+              <tr className="border-t border-slate-200">
+                <td className="py-1 pr-2 font-semibold">Exit</td>
+                <td className="py-1">{preview.exitTime} onwards</td>
+              </tr>
             </tbody>
           </table>
           {(preview.warnings ?? []).length > 0 && (
-            <div className="mt-2 rounded border border-amber-300 bg-amber-50 p-2">
+            <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-2">
               {preview.warnings.map((w: any, i: number) => (
                 <div key={i} className="mb-1">
                   <p className="font-semibold text-amber-900">{w.message}</p>
@@ -116,13 +216,13 @@ export function MovementPlanPanel({ bookingId, hasPlan }: { bookingId: string; h
               />
             </div>
           )}
-          <div className="mt-2 flex gap-2">
+          <div className="mt-3 flex gap-2">
             <button
               className="btn-primary"
               disabled={busy || ((preview.warnings ?? []).length > 0 && !reason)}
               onClick={confirm}
             >
-              Confirm & save (reserves labs)
+              Confirm & save (reserves spaces)
             </button>
             <button className="btn-outline" onClick={() => setPreview(null)}>Discard</button>
           </div>

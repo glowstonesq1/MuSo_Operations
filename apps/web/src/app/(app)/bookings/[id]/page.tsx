@@ -20,7 +20,7 @@ export default async function BookingDetailPage({ params }: { params: { id: stri
     .maybeSingle();
   if (!b) notFound();
 
-  const [{ data: mp }, { data: asks }, { data: history }, { data: staff }, { data: incidents }] = await Promise.all([
+  const [{ data: mp }, { data: asks }, { data: history }, { data: staff }, { data: incidents }, { data: spaces }] = await Promise.all([
     supabase
       .from("movement_plans")
       .select("*, movement_plan_sessions(*, resource:resources(name)), movement_plan_tasks(*)")
@@ -30,6 +30,7 @@ export default async function BookingDetailPage({ params }: { params: { id: stri
     supabase.from("booking_history").select("*").eq("booking_id", params.id).order("changed_at", { ascending: false }).limit(25),
     supabase.from("staff").select("id, name").eq("is_active", true).order("name"),
     supabase.from("incidents").select("*").eq("booking_id", params.id).order("time_reported", { ascending: false }),
+    supabase.from("resources").select("id, name, capacity").eq("is_bookable", true).order("name"),
   ]);
 
   const isSchoolish = ["school", "csr_general", "csr_stem", "csr_financial_literacy", "csr_future_makers", "summer_camp"].includes(b.booking_type);
@@ -215,7 +216,7 @@ export default async function BookingDetailPage({ params }: { params: { id: stri
           ) : (
             <p className="mb-3 text-sm text-slate-400">No movement plan yet.</p>
           )}
-          {canWrite && <MovementPlanPanel bookingId={b.id} hasPlan={!!mp} />}
+          {canWrite && <MovementPlanPanel bookingId={b.id} hasPlan={!!mp} spaces={spaces ?? []} />}
         </div>
       )}
 

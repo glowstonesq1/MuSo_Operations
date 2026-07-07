@@ -13,6 +13,22 @@ export function StaffRoleEditor({ member }: { member: any }) {
   const [ext, setExt] = useState(member.extension ?? "");
   const [active, setActive] = useState(member.is_active !== false);
   const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function removeIt() {
+    if (!window.confirm(`Delete ${member.name} from the staff directory? If they are linked to past bookings, deactivate instead.`)) return;
+    setBusy(true);
+    setErr(null);
+    const { error } = await createClient().from("staff").delete().eq("id", member.id);
+    setBusy(false);
+    if (error) {
+      if (error.code === "23503") {
+        setErr("Linked to bookings — deactivated instead.");
+        await createClient().from("staff").update({ is_active: false }).eq("id", member.id);
+        router.refresh();
+      } else setErr(error.message);
+    } else router.refresh();
+  }
 
   async function saveIt() {
     setBusy(true);
@@ -39,6 +55,10 @@ export function StaffRoleEditor({ member }: { member: any }) {
         <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} /> active
       </label>
       <button className="btn-outline text-xs" disabled={busy} onClick={saveIt}>Save</button>
+      <button className="btn text-xs text-red-600 hover:bg-red-50" disabled={busy} onClick={removeIt} title="Delete staff member">
+        Delete
+      </button>
+      {err && <span className="text-xs text-red-600">{err}</span>}
     </div>
   );
 }

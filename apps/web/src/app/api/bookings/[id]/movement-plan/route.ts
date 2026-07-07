@@ -5,14 +5,40 @@ import { generateMovementPlan, isExclusionViolation, type PlanResult } from "@mu
 const DEFAULT_LAB_NAMES = ["Play Lab", "Discover Lab", "Make Lab"];
 const EXTRA_LAB_NAMES = ["Grow Lab"];
 
-async function buildPlan(supabase: any, bookingId: string): Promise<{ plan?: PlanResult; booking?: any; error?: string }> {
+/** Generation conditions chosen by the ops team before generating —
+ *  rain, dedicated-floor requests, workshop-only visits etc. all reduce
+ *  to: which spaces rotate, how long each session is, and whether lunch fits. */
+interface PlanOptions {
+  lab_ids?: string[];
+  session_minutes?: number;
+  switch_minutes?: number;
+  include_lunch?: boolean;
+  note?: string;
+}
+
+async function buildPlan(
+  supabase: any,
+  bookingId: string,
+  opts: PlanOptions
+): Promise<{ plan?: PlanResult; booking?: any; error?: string }> {
   const { data: b } = await supabase.from("bookings").select("*").eq("id", bookingId).single();
   if (!b) return { error: "Booking not found" };
   const { data: resources } = await supabase.from("resources").select("*").eq("is_bookable", true);
-  const byName = new Map((resources ?? []).map((r: any) => [r.name, r]));
-  const labs = DEFAULT_LAB_NAMES.map((n) => byName.get(n)).filter(Boolean) as any[];
-  const extra = EXTRA_LAB_NAMES.map((n) => byName.get(n)).filter(Boolean) as any[];
-  if (labs.length < 2) return { error: "Lab resources missing; seed Play/Discover/Make Lab first." };
+  const all = resources ?? [];
+
+  let labs: any[];
+  let extra: any[] = [];
+  if (opts.lab_ids?.length) {
+    // explicit selection: rotate exactly these spaces, in the order given
+    labs = opts.lab_ids.map((id) => all.find((r: any) => r.id === id)).filter(Boolean);
+  } else {
+    const byName = new Map(all.map((r: any) => [r.name, r]));
+    labs = DEFAULT_LAB_NAMES.map((n) => byName.get(n)).filter(Boolean) as any[];
+    extra = EXTRA_LAB_NAMES.map((n) => byName.get(n)).filter(Boolean) as any[];
+  }
+  if (labs.length < 1) return { error: "Select at least one space to rotate through." };
+
+  const includeLunch = opts.include_lunch ?? !!b.kids_lunch_time;
   const plan = generateMovementPlan({
     children: b.children_actual ?? b.children_planned ?? 0,
     slotStart: b.slot_start.slice(0, 5),
@@ -20,7 +46,9 @@ async function buildPlan(supabase: any, bookingId: string): Promise<{ plan?: Pla
     orientationTime: b.orientation_time?.slice(0, 5) ?? null,
     labs: labs.map((l) => ({ id: l.id, name: l.name, capacity: l.capacity })),
     extraLabs: extra.map((l) => ({ id: l.id, name: l.name, capacity: l.capacity })),
-    lunchStart: b.kids_lunch_time ? add5(b.kids_lunch_time.slice(0, 5)) : null,
+    sessionMinutes: opts.session_minutes ?? 70,
+    switchMinutes: opts.switch_minutes ?? 5,
+    lunchStart: includeLunch && b.kids_lunch_time ? add5(b.kids_lunch_time.slice(0, 5)) : null,
   });
   return { plan, booking: b };
 }
@@ -31,16 +59,16 @@ function add5(t: string) {
   return `${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}`;
 }
 
-/** POST -> preview (no writes). Returns plan + warnings (Case 5 options). */
-export async function POST(_req: Request, { params }: { params: { id: string } }) {
+/** POST -> preview with conditions (no writes). */
+export async function POST(req: Request, { params }: { params: { id: string } }) {
   const supabase = createClient();
-  const { plan, error } = await buildPlan(supabase, params.id);
+  const opts: PlanOptions = await req.json().catch(() => ({}));
+  const { plan, error } = await buildPlan(supabase, params.id, opts);
   if (error) return NextResponse.json({ error }, { status: 400 });
   return NextResponse.json({ plan });
 }
 
-/** PUT -> confirm & save: movement_plans + sessions + resource_bookings.
- *  Body may carry { accepted_warnings: string[], reason } (Case 5 logging). */
+/** PUT -> confirm & save with the same conditions used for the preview. */
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
   const supabase = createClient();
   const {
@@ -48,19 +76,20 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
 
-  const body = await req.json().catch(() => ({}));
-  const { plan, booking, error } = await buildPlan(supabase, params.id);
+  const body: PlanOptions & { accepted_warnings?: string[]; reason?: string } = await req
+    .json()
+    .catch(() => ({}));
+  const { plan, booking, error } = await buildPlan(supabase, params.id, body);
   if (error || !plan || !booking) return NextResponse.json({ error }, { status: 400 });
 
-  // replace existing plan
   await supabase.from("movement_plans").delete().eq("booking_id", params.id);
   const { data: mp, error: mpError } = await supabase
     .from("movement_plans")
     .insert({
       booking_id: params.id,
       num_groups: plan.numGroups,
-      session_duration_minutes: 70,
-      switch_duration_minutes: 5,
+      session_duration_minutes: body.session_minutes ?? 70,
+      switch_duration_minutes: body.switch_minutes ?? 5,
       lunch_start: plan.lunch?.fromTime ?? null,
       lunch_end: plan.lunch?.toTime ?? null,
       auto_generated: true,
@@ -83,7 +112,6 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   const { error: sErr } = await supabase.from("movement_plan_sessions").insert(sessionRows);
   if (sErr) return NextResponse.json({ error: sErr.message }, { status: 400 });
 
-  // default task rows (editable later)
   await supabase.from("movement_plan_tasks").insert([
     { movement_plan_id: mp.id, sort_order: 1, task: "Bus Deboarding & Parking", timing_text: booking.bus_reporting_time?.slice(0, 5) ?? null },
     { movement_plan_id: mp.id, sort_order: 2, task: "Transportation to Commons", timing_text: null },
@@ -92,7 +120,6 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     { movement_plan_id: mp.id, sort_order: 5, task: "Feedback & Exit", timing_text: `${plan.exitTime} onwards` },
   ]);
 
-  // rebuild resource reservations for the rotation (Case 1 enforced by DB)
   await supabase.from("resource_bookings").delete().eq("booking_id", params.id).not("group_label", "is", null);
   const rbRows = plan.sessions.flatMap((s) =>
     s.assignments.map((a) => ({
@@ -111,7 +138,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
         {
           warning: "resource_clash",
           message:
-            "A lab in this rotation is already reserved by another booking in the same window. Resolve the clash (shift this booking, or free the lab) and regenerate.",
+            "A space in this rotation is already reserved by another booking in the same window. Adjust the conditions (different spaces or times) and regenerate.",
         },
         { status: 409 }
       );
@@ -119,14 +146,19 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     return NextResponse.json({ error: rbErr.message }, { status: 400 });
   }
 
-  if (body.accepted_warnings?.length) {
+  const historyNotes = [
+    body.note ? `Conditions: ${body.note}` : null,
+    body.accepted_warnings?.length ? `Accepted: ${body.accepted_warnings.join("; ")}` : null,
+    body.reason ? `Reason: ${body.reason}` : null,
+  ].filter(Boolean);
+  if (historyNotes.length) {
     await supabase.from("booking_history").insert({
       booking_id: params.id,
       booking_name: booking.name,
       visit_date: booking.visit_date,
       changed_by: user.id,
-      change_type: "capacity_override",
-      reason: `${body.accepted_warnings.join("; ")}${body.reason ? ` — ${body.reason}` : ""}`,
+      change_type: "movement_plan_conditions",
+      reason: historyNotes.join(" — "),
     });
   }
 
